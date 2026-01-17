@@ -5,12 +5,10 @@
         "reportMissingModuleSource": "none"
     },
     "python.analysis.typeshedPaths": [
-        ".venv/Lib/site-packages",
-        "typings"
+        "./typings"
     ],
     "python.autoComplete.extraPaths": [
-        ".venv/Lib/site-packages",
-        "typings"
+        "./typings"
     ],
     "[python]": {
         "editor.formatOnSave": true,
@@ -19,5 +17,8 @@
           "source.organizeImports": "explicit"
         },
         "editor.defaultFormatter": "charliermarsh.ruff"
-    }
+    },
+    // MicroPico settings
+    "micropico.syncFolder": "",
+    "micropico.openOnStart": true,
 }
