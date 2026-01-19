@@ -3,5 +3,6 @@ __pycache__/
 
 # Distribution / packaging
 typings/
-umodbus/
 config/
+umodbus/
+tinyweb/
