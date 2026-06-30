@@ -1,6 +1,7 @@
 import asyncio
 import time
 
+from bsb import controller
 import restserver
 
 import modbus
@@ -11,7 +12,9 @@ async def async_main():
         while True:
             modbus_controller = modbus.ModbusController()
             modbus_task = asyncio.create_task(modbus_controller.run())
-            rest_server = restserver.RestServer(modbus_controller)
+            bsb_controller = controller.BsbController()
+            bsb_task = asyncio.create_task(bsb_controller.run())
+            rest_server = restserver.RestServer(modbus_controller, bsb_controller)
             rest_task = asyncio.create_task(rest_server.run())
             await asyncio.sleep(3600)
     except asyncio.CancelledError:
@@ -19,6 +22,11 @@ async def async_main():
         rest_task.cancel()
         try:
             await rest_task
+        except asyncio.CancelledError:
+            pass
+        bsb_task.cancel()
+        try:
+            await bsb_task
         except asyncio.CancelledError:
             pass
         modbus_task.cancel()
