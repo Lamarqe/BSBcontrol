@@ -1,8 +1,11 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 
+# config files
+config/
+
 # Distribution / packaging
 typings/
-config/
 umodbus/
-tinyweb/
+microdot/
+
