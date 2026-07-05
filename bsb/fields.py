@@ -66,11 +66,6 @@ class BsBConfigReader:
                     "telegram_id":    bytes.fromhex(d["cmd"]),
                     "name":           d.get("name", str(param)),
                     "type":           d.get("type", ""),
-                    "factor":         d.get("factor", 1),
-                    "payload_length": d.get("payload_length", 0),
-                    "unsigned":       d.get("unsigned", False),
-                    "nullable":       d.get("nullable", False),
-                    "unit":           d.get("unit", ""),
                     "enum":           d.get("enum"),   # string name until resolved
                     "min_value":      d.get("min_value"),
                     "max_value":      d.get("max_value"),

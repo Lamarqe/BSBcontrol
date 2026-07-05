@@ -11,7 +11,6 @@ _FIELD_IDS = [700, 710, 8700, 8743]
 # Required keys every field dict must contain
 _REQUIRED_KEYS = {
     "id", "telegram_id", "name", "type",
-    "factor", "payload_length", "unsigned", "nullable", "unit",
     "enum", "min_value", "max_value", "readonly",
 }
 
@@ -71,28 +70,12 @@ def test_field_700_is_not_readonly(fields):
     assert fields[700]["readonly"] is False
 
 
-def test_field_700_payload_length_1(fields):
-    assert fields[700]["payload_length"] == 1
-
-
 # ---------------------------------------------------------------------------
 # Field 710 — Comfort setpoint (TEMP/VALS, factor=64, unit=°C)
 # ---------------------------------------------------------------------------
 
 def test_field_710_type_is_temp(fields):
     assert fields[710]["type"] == "TEMP"
-
-
-def test_field_710_factor_64(fields):
-    assert fields[710]["factor"] == 64
-
-
-def test_field_710_unit_celsius(fields):
-    assert "°C" in fields[710]["unit"]
-
-
-def test_field_710_payload_length_2(fields):
-    assert fields[710]["payload_length"] == 2
 
 
 def test_field_710_no_enum(fields):
@@ -111,20 +94,12 @@ def test_field_8700_type_is_temp(fields):
     assert fields[8700]["type"] == "TEMP"
 
 
-def test_field_8700_unit_celsius(fields):
-    assert "°C" in fields[8700]["unit"]
-
-
 # ---------------------------------------------------------------------------
 # Field 8743 — Flow temperature setpoint (read-only sensor)
 # ---------------------------------------------------------------------------
 
 def test_field_8743_is_readonly(fields):
     assert fields[8743]["readonly"] is True
-
-
-def test_field_8743_factor_64(fields):
-    assert fields[8743]["factor"] == 64
 
 
 # ---------------------------------------------------------------------------
