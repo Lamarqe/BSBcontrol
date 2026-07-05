@@ -10,6 +10,13 @@ from .protocol import (
 
 CONFIG_FILE = "config/bsb.json"
 
+_TYPE_TO_DATATYPE = {
+    "ENUM": "ENUM",
+    "TEMP": "VALS",
+    "PERCENT": "VALS",
+    "PERCENT_NN": "VALS",
+}
+
 REQUEST_TIMEOUT = 5.0
 POLL_INTERVAL = 0.02
 
@@ -23,9 +30,10 @@ def _build_commands(fields_raw):
     commands_by_tid = {}
     for field_id, fdef in fields_raw.items():
         tid = _tid_int(fdef["telegram_id"])
+        type_name = fdef["type"]
         bsb_type = BsbType(
-            name=fdef["type_name"],
-            datatype=fdef["datatype"],
+            name=type_name,
+            datatype=_TYPE_TO_DATATYPE[type_name],
             payload_length=fdef["payload_length"],
             factor=fdef["factor"],
             unsigned=fdef["unsigned"],
