@@ -9,13 +9,7 @@ from .protocol import (
 )
 
 CONFIG_FILE = "config/bsb.json"
-
-_TYPE_TO_DATATYPE = {
-    "ENUM": "ENUM",
-    "TEMP": "VALS",
-    "PERCENT": "VALS",
-    "PERCENT_NN": "VALS",
-}
+TYPES_FILE  = "config/bsb-types.json"
 
 REQUEST_TIMEOUT = 5.0
 POLL_INTERVAL = 0.02
@@ -25,27 +19,28 @@ def _tid_int(tid_bytes):
     return (tid_bytes[0] << 24) | (tid_bytes[1] << 16) | (tid_bytes[2] << 8) | tid_bytes[3]
 
 
-def _build_commands(fields_raw):
+def _build_commands(fields_raw, type_meta):
     commands = {}
     commands_by_tid = {}
     for field_id, fdef in fields_raw.items():
         tid = _tid_int(fdef["telegram_id"])
         type_name = fdef["type"]
+        meta = type_meta[type_name]
         bsb_type = BsbType(
             name=type_name,
-            datatype=_TYPE_TO_DATATYPE[type_name],
-            payload_length=fdef["payload_length"],
-            factor=fdef["factor"],
-            unsigned=fdef["unsigned"],
-            unit=fdef["unit"],
-            enable_byte=6 if fdef["nullable"] else 1,
+            datatype=meta["datatype"],
+            payload_length=meta["payload_length"],
+            factor=meta.get("factor", 1),
+            unsigned=meta.get("unsigned", False),
+            unit=meta["unit"],
+            enable_byte=meta["enable_byte"],
         )
         cmd = BsbCommand(
             parameter=field_id,
             telegram_id=tid,
             disp_name=fdef["name"],
             bsb_type=bsb_type,
-            unit=fdef["unit"],
+            unit=meta["unit"],
             enum=fdef["enum"],
             min_value=fdef["min_value"],
             max_value=fdef["max_value"],
@@ -62,8 +57,9 @@ class BsbController:
         self.own_address = config["own_address"]
         self.dest_address = config["dest_address"]
 
+        type_meta = json.load(open(TYPES_FILE))
         fields_raw = BsBConfigReader().load_fields(config["fields"])
-        self._commands, self._commands_by_tid = _build_commands(fields_raw)
+        self._commands, self._commands_by_tid = _build_commands(fields_raw, type_meta)
 
         self._uart = machine.UART(2, rx=36, tx=5, baudrate=4800, parity=1, stop=1, bits=8)
         self._leftover = b""
