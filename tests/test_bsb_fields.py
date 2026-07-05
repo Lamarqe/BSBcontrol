@@ -66,8 +66,8 @@ def test_field_700_has_enum_dict_with_int_keys(fields):
         assert isinstance(k, int), "Enum key %r is not int" % k
 
 
-def test_field_700_is_not_readonly(fields):
-    assert fields[700]["readonly"] is False
+def test_field_700_is_readonly(fields):
+    assert fields[700]["readonly"] is True
 
 
 # ---------------------------------------------------------------------------

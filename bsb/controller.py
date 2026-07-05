@@ -11,6 +11,7 @@ from .protocol import (
 CONFIG_FILE = "config/bsb.json"
 TYPES_FILE  = "config/bsb-types.json"
 
+DEBUG = False
 REQUEST_TIMEOUT = 5.0
 POLL_INTERVAL = 0.02
 
@@ -87,11 +88,25 @@ class BsbController:
                 self._dispatch(item)
 
     def _dispatch(self, telegram):
+        if DEBUG:
+            print("[BSB] rx: type=%s tid=0x%08X src=0x%02X dst=0x%02X data=%r raw=%s" % (
+                telegram.packettype,
+                telegram.command.telegram_id,
+                telegram.src,
+                telegram.dst,
+                telegram.data,
+                " ".join("%02X" % b for b in telegram.rawdata),
+            ))
         if telegram.packettype in ("ret", "ack"):
             pending = self._pending.get(telegram.command.telegram_id)
             if pending:
                 pending["result"].append(telegram)
                 pending["event"].set()
+            elif DEBUG:
+                print("[BSB] rx: no pending for tid=0x%08X (pending keys: %s)" % (
+                    telegram.command.telegram_id,
+                    ["0x%08X" % k for k in self._pending],
+                ))
 
     async def get_field(self, field_id):
         cmd = self._commands.get(field_id)
@@ -109,7 +124,15 @@ class BsbController:
                 dst=self.dest_address,
                 packettype="get",
             )
-            self._uart.write(invert(telegram.serialize(validate=False)))
+            raw_tx = telegram.serialize(validate=False)
+            if DEBUG:
+                print("[BSB] tx: GET field=%d tid=0x%08X dst=0x%02X bytes=%s" % (
+                    field_id,
+                    cmd.telegram_id,
+                    self.dest_address,
+                    " ".join("%02X" % b for b in invert(raw_tx)),
+                ))
+            self._uart.write(invert(raw_tx))
             await asyncio.wait_for(event.wait(), REQUEST_TIMEOUT)
             t = result[0]
             return {"id": field_id, "name": cmd.disp_name, "value": t.data, "unit": cmd.unit}
