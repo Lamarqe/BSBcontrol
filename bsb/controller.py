@@ -15,15 +15,11 @@ REQUEST_TIMEOUT = 5.0
 POLL_INTERVAL = 0.02
 
 
-def _tid_int(tid_bytes):
-    return (tid_bytes[0] << 24) | (tid_bytes[1] << 16) | (tid_bytes[2] << 8) | tid_bytes[3]
-
-
 def _build_commands(fields_raw, type_meta):
     commands = {}
     commands_by_tid = {}
     for field_id, fdef in fields_raw.items():
-        tid = _tid_int(fdef["telegram_id"])
+        tid = fdef["telegram_id"]
         type_name = fdef["type"]
         meta = type_meta[type_name]
         bsb_type = BsbType(

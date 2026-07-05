@@ -63,7 +63,7 @@ class BsBConfigReader:
                 d = json.loads(value_text)
                 result[param] = {
                     "id":             param,
-                    "telegram_id":    bytes.fromhex(d["cmd"]),
+                    "telegram_id":    int(d["cmd"], 16),
                     "name":           d.get("name", str(param)),
                     "type":           d.get("type", ""),
                     "enum":           d.get("enum"),   # string name until resolved
