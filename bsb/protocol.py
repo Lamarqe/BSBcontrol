@@ -4,6 +4,8 @@
 import struct
 import time
 
+DEBUG = False
+
 # ---------------------------------------------------------------------------
 # CRC16-XMODEM
 # ---------------------------------------------------------------------------
@@ -144,21 +146,69 @@ class BsbCommand:
 # ---------------------------------------------------------------------------
 # Payload decode
 # ---------------------------------------------------------------------------
+# Flag byte semantics  (authoritative source: BSB-LAN defs.h + old bsbgateway)
+#
+# All VALS/ENUM/BITS/Datetime types carry a leading flag byte on the wire.
+# TimeProgram and String do NOT — their payload_length+1 bytes are fully used
+# for data (12 slot bytes / null-terminated string).
+#
+# enable_byte (from bsb-types.json, mirrors BSB-LAN's optbl):
+#   0 or 1  ->  non-nullable type.  "value present" flag for SET = 0x01.
+#   6       ->  nullable type.      "value present" flag for SET = 0x06.
+#   8       ->  TimeProgram / no flag byte.
+#
+# RET packet (heating controller → us):
+#   Non-nullable: flag byte present but NOT used for null detection.
+#                 Always strip and decode regardless of flag value.
+#                 (Some controllers send flag=0x00, others send flag=0x01.)
+#   Nullable:     flag == enable_byte (0x06) → value present, strip and decode.
+#                 flag != enable_byte         → null/unavailable, return None.
+#
+# SET packet (us → heating controller):
+#   Non-nullable: flag = enable_byte (0x01) for value present.
+#   Nullable:     flag = enable_byte (0x06) for value present.
+#   Nullable null:flag = 0x05 to request "disable".
+#
+# Encoding RET (used only in tests / simulator context, not on the wire):
+#   Non-nullable non-null: flag = 0x00
+#   Nullable non-null:     flag = enable_byte (0x06)
+#   Nullable null:         flag = 0x01  (what a real controller sends)
+# ---------------------------------------------------------------------------
+
+def _is_null_flag(bsb_type, flag, packettype):
+    """Return True when the flag byte signals that no value is available.
+
+    Only nullable types (enable_byte == 6) can signal null:
+      "ret": flag != enable_byte (e.g. flag == 0x01 from controller means null)
+      "set": flag == 0x05 (client requests controller to disable the field)
+    Non-nullable types never signal null via the flag byte.
+    """
+    if not bsb_type.nullable:
+        return False
+    if packettype == "ret":
+        return flag != bsb_type.enable_byte   # anything other than 0x06 = null
+    else:
+        return flag == 0x05                   # set: explicit disable request
+
 
 def decode(data, bsb_type, packettype="ret"):
     if bsb_type.datatype == BsbDatatype.Raw:
         return data
-    expect_len = min(bsb_type.payload_length + 1, 22)
-    if len(data) != expect_len:
+
+    # Wire payload is always payload_length + 1 bytes for all types (capped at 22).
+    # For VALS/ENUM/BITS/Datetime: the +1 is the flag byte.
+    # For TimeProgram: payload_length=11 + 1 = 12 actual slot bytes (no flag byte).
+    # For String: the +1 is the null terminator (no flag byte).
+    expected_len = min(bsb_type.payload_length + 1, 22)
+    if len(data) != expected_len:
         raise DecodeError(
             "Payload has wrong length. Expected %d bytes, got %d"
-            % (bsb_type.payload_length + 1, len(data))
+            % (expected_len, len(data))
         )
+
     if bsb_type.datatype not in (BsbDatatype.TimeProgram, BsbDatatype.String, BsbDatatype.Raw):
         flag = data[0]
-        if packettype == "ret" and flag != 0:
-            return None
-        if packettype == "set" and flag not in (1, 6):
+        if _is_null_flag(bsb_type, flag, packettype):
             return None
         data = data[1:]
     if bsb_type.name == "YEAR":
@@ -291,17 +341,17 @@ def encode(data, bsb_type, command, validate=True, packettype="set"):
         if not bsb_type.nullable:
             raise EncodeError("Type is not nullable, cannot encode None")
         if packettype == "ret":
-            flag = 0x01
+            flag = 0x01              # ret: null value (what a real controller sends)
         else:
-            flag = 0x05
+            flag = 0x05              # set: request controller to disable
     else:
         if packettype == "ret":
-            flag = 0x00
-        else:
             if bsb_type.nullable:
-                flag = 0x06
+                flag = bsb_type.enable_byte  # 0x06: nullable type, value present
             else:
-                flag = 0x01
+                flag = 0x00              # 0x00: non-nullable type, value present
+        else:
+            flag = bsb_type.enable_byte  # set: always use enable_byte (0x01 or 0x06)
 
     if data is not None:
         if bsb_type.name == "YEAR":
@@ -468,7 +518,7 @@ class BsbTelegram:
     @classmethod
     def _skip(cls, data):
         try:
-            idx = data.index(0xdc, 1)
+            idx = data.index(b'\xdc', 1)
         except ValueError:
             return data, b""
         return data[:idx], data[idx:]
@@ -517,6 +567,14 @@ class BsbTelegram:
             value = decode(rawdata, field.bsb_type, packettype=packettype)
         else:
             value = None
+        if DEBUG:
+            print("[BSB] parse: type=%s tid=0x%08X known=%s raw=%s value=%r" % (
+                packettype,
+                fieldid,
+                field.bsb_type is not None,
+                " ".join("%02X" % b for b in rawdata),
+                value,
+            ))
 
         t = cls(
             command=field,

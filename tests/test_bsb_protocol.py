@@ -113,11 +113,14 @@ def test_invert_roundtrip():
     ("0000010000",     int32,  65536),
     ("000001",         int32,  DecodeError),      # wrong length (3 != 5)
     ("000001000000",   int40,  AssertionError),   # payload_length=5 not in [1,2,4]
-    # ---- Flag byte → None ----
-    ("010A",           int8,   None),
-    ("020A",           int8,   None),
-    ("050A",           int8,   None),
-    ("060A",           int8,   None),
+    # ---- Non-nullable: flag byte always stripped, value always decoded ----
+    ("010A",           int8,   10),   # flag=0x01 stripped → 0x0A = 10
+    ("020A",           int8,   10),   # flag=0x02 stripped → 0x0A = 10
+    ("050A",           int8,   10),   # flag=0x05 stripped → 0x0A = 10
+    ("060A",           int8,   10),   # flag=0x06 stripped (int8 not nullable) → 10
+    # ---- Nullable (enable_byte==6): flag==6 means "value present", flag!=6 means null ----
+    ("060A",           int8_nullable, 10),   # flag=0x06 == enable_byte → value present, decode
+    ("010A",           int8_nullable, None), # flag=0x01 != enable_byte → null
     # ---- Bits / Enum ----
     ("00FE",           bits,   b"\xFE"),
     ("00FE",           enum,   254),
@@ -198,7 +201,14 @@ def test_encode_decode_roundtrip(value, bsb_type):
         if packettype == "ret" and bsb_type.datatype not in (
             BsbDatatype.TimeProgram, BsbDatatype.String, BsbDatatype.Raw
         ):
-            expected_flag = 1 if value is None else 0
+            # nullable null in ret → flag=0x01; nullable non-null → enable_byte (0x06)
+            # non-nullable non-null → 0x00
+            if value is None:
+                expected_flag = 0x01  # null: what a real controller sends
+            elif bsb_type.nullable:
+                expected_flag = bsb_type.enable_byte  # 0x06: value present for nullable
+            else:
+                expected_flag = 0x00  # value present for non-nullable
             assert enc[0] == expected_flag, \
                 "packettype=ret: wrong flag for %r: got 0x%02x expected 0x%02x" % (
                     value, enc[0], expected_flag)
