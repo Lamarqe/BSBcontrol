@@ -39,10 +39,10 @@ def test_field_id_matches_dict_key(fields):
         assert f["id"] == fid
 
 
-def test_telegram_id_is_4_bytes(fields):
+def test_telegram_id_is_int(fields):
     for fid, f in fields.items():
-        assert isinstance(f["telegram_id"], bytes), "Field %d: telegram_id not bytes" % fid
-        assert len(f["telegram_id"]) == 4, "Field %d: telegram_id not 4 bytes" % fid
+        assert isinstance(f["telegram_id"], int), "Field %d: telegram_id not int" % fid
+        assert f["telegram_id"] > 0, "Field %d: telegram_id is not positive" % fid
 
 
 def test_field_name_is_nonempty_string(fields):
