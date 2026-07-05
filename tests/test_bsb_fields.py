@@ -10,7 +10,7 @@ _FIELD_IDS = [700, 710, 8700, 8743]
 
 # Required keys every field dict must contain
 _REQUIRED_KEYS = {
-    "id", "telegram_id", "name", "type_name", "datatype",
+    "id", "telegram_id", "name", "type",
     "factor", "payload_length", "unsigned", "nullable", "unit",
     "enum", "min_value", "max_value", "readonly",
 }
@@ -55,8 +55,8 @@ def test_field_name_is_nonempty_string(fields):
 # Field 700 — Operating mode (ENUM, writable, has inline enum dict)
 # ---------------------------------------------------------------------------
 
-def test_field_700_datatype_is_enum(fields):
-    assert fields[700]["datatype"] == "ENUM"
+def test_field_700_type_is_enum(fields):
+    assert fields[700]["type"] == "ENUM"
 
 
 def test_field_700_has_enum_dict_with_int_keys(fields):
@@ -79,8 +79,8 @@ def test_field_700_payload_length_1(fields):
 # Field 710 — Comfort setpoint (TEMP/VALS, factor=64, unit=°C)
 # ---------------------------------------------------------------------------
 
-def test_field_710_datatype_is_vals(fields):
-    assert fields[710]["datatype"] == "VALS"
+def test_field_710_type_is_temp(fields):
+    assert fields[710]["type"] == "TEMP"
 
 
 def test_field_710_factor_64(fields):
@@ -107,8 +107,8 @@ def test_field_8700_is_readonly(fields):
     assert fields[8700]["readonly"] is True
 
 
-def test_field_8700_datatype_is_vals(fields):
-    assert fields[8700]["datatype"] == "VALS"
+def test_field_8700_type_is_temp(fields):
+    assert fields[8700]["type"] == "TEMP"
 
 
 def test_field_8700_unit_celsius(fields):
@@ -144,4 +144,4 @@ def test_empty_whitelist_returns_empty_dict():
 def test_subset_of_ids():
     result = bsb_fields.BsBConfigReader().load_fields([700])
     assert list(result.keys()) == [700]
-    assert result[700]["datatype"] == "ENUM"
+    assert result[700]["type"] == "ENUM"
