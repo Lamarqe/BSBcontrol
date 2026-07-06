@@ -9,13 +9,13 @@ import modbus
 
 async def async_main():
     try:
+        modbus_controller = modbus.ModbusController()
+        modbus_task = asyncio.create_task(modbus_controller.run())
+        bsb_controller = controller.BsbController()
+        bsb_task = asyncio.create_task(bsb_controller.run())
+        rest_server = restserver.RestServer(modbus_controller, bsb_controller)
+        rest_task = asyncio.create_task(rest_server.run())
         while True:
-            modbus_controller = modbus.ModbusController()
-            modbus_task = asyncio.create_task(modbus_controller.run())
-            bsb_controller = controller.BsbController()
-            bsb_task = asyncio.create_task(bsb_controller.run())
-            rest_server = restserver.RestServer(modbus_controller, bsb_controller)
-            rest_task = asyncio.create_task(rest_server.run())
             await asyncio.sleep(3600)
     except asyncio.CancelledError:
         print("Main task shall be cancelled")
