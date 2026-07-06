@@ -56,7 +56,16 @@ class RestServer:
 
     async def run(self):
         try:
-            await self.app.start_server(host="0.0.0.0", port=80)
+            while True:
+                try:
+                    await self.app.start_server(host="0.0.0.0", port=80)
+                    break
+                except OSError as e:
+                    if e.args[0] == 112:  # EADDRINUSE
+                        print("Port 80 in use, retrying in 5s...")
+                        await asyncio.sleep(5)
+                    else:
+                        raise
         except asyncio.CancelledError:
             print("webserver shall be cancelled")
             await self.app.shutdown()
