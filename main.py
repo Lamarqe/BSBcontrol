@@ -5,15 +5,17 @@ from bsb import bsb
 import restserver
 
 import modbus
+import thermostat
 
 
 async def async_main():
     try:
         modbus_controller = modbus.ModbusController()
-        modbus_task = asyncio.create_task(modbus_controller.run())
         bsb_controller = bsb.BsbController()
+        thermostat_controller = thermostat.ThermostatController(modbus_controller, bsb_controller)
+        thermostat_task = asyncio.create_task(thermostat_controller.run())
         bsb_task = asyncio.create_task(bsb_controller.run())
-        rest_server = restserver.RestServer(modbus_controller, bsb_controller)
+        rest_server = restserver.RestServer(thermostat_controller, bsb_controller)
         rest_task = asyncio.create_task(rest_server.run())
         while True:
             await asyncio.sleep(3600)
@@ -29,9 +31,9 @@ async def async_main():
             await bsb_task
         except asyncio.CancelledError:
             pass
-        modbus_task.cancel()
+        thermostat_task.cancel()
         try:
-            await modbus_task
+            await thermostat_task
         except asyncio.CancelledError:
             pass
         print("Main task was cancelled")
