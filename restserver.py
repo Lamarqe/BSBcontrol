@@ -34,6 +34,12 @@ class RestServer:
             self.thermostat_controller.set_target_temperature(room, request.json["target_temperature"])
             return {"message": "updated"}
 
+        @self.app.route("/relay_status/<room>", methods=["GET"])
+        async def get_relay_status(request, room):
+            if room not in self.thermostat_controller.rooms:
+                return {"message": "no such room"}, 404
+            return {"relay_status": self.thermostat_controller.rooms[room].relay_on}
+
         @self.app.route("/bsb/field/<field_id>", methods=["GET"])
         async def get_bsb_field(request, field_id):
             try:
