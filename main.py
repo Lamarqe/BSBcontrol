@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-from bsb import controller
+from bsb import bsb
 import restserver
 
 import modbus
@@ -11,7 +11,7 @@ async def async_main():
     try:
         modbus_controller = modbus.ModbusController()
         modbus_task = asyncio.create_task(modbus_controller.run())
-        bsb_controller = controller.BsbController()
+        bsb_controller = bsb.BsbController()
         bsb_task = asyncio.create_task(bsb_controller.run())
         rest_server = restserver.RestServer(modbus_controller, bsb_controller)
         rest_task = asyncio.create_task(rest_server.run())
