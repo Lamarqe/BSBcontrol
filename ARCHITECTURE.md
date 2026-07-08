@@ -13,39 +13,70 @@ ESP32-based MicroPython thermostat controller with Modbus TCP, BSB boiler bus, a
 | File | Purpose |
 |------|---------|
 | `boot.py` | Network init (LAN → Wi-Fi fallback), WebREPL start |
-| `main.py` | Async entry point; launches `ModbusController`, `BsbController`, `RestServer` tasks |
-| `modbus.py` | Thermostat logic: reads temps, drives relays via Modbus TCP |
-| `bsb.py` | BSB boiler bus controller: UART comms, GET/SET field requests |
-| `bsb_protocol.py` | BSB protocol layer: telegram parse/serialize, CRC16, payload encode/decode |
-| `bsb_fields.py` | Loads BSB field definitions from device model JSON for whitelisted field IDs |
+| `main.py` | Async entry point; launches `ThermostatController`, `BsbController`, `RestServer` tasks |
+| `thermostat.py` | Room thermostat logic: rule-based relay control, target-temperature persistence |
+| `modbus.py` | Modbus TCP I/O driver: `ModbusDevice`, `RoomConfig` (temperature read, relay read/write) |
+| `bsb/bsb.py` | BSB boiler bus controller: UART comms, GET/SET field requests |
+| `bsb/protocol.py` | BSB protocol layer: telegram parse/serialize, CRC16, payload encode/decode |
+| `bsb/fields.py` | Loads BSB field definitions from config files for whitelisted field IDs |
 | `restserver.py` | HTTP REST API (microdot, port 80) |
 | `config/modbus.json` | Modbus device + room mapping |
 | `config/network.json` | IP config + Wi-Fi credentials |
 | `config/bsb.json` | BSB own/dest address and whitelisted field ID list |
+| `state/thermostat_state.json` | Persisted per-room target temperatures (created on first write, gitignored) |
 
 ## Async Architecture
 All three subsystems run as concurrent `asyncio` tasks under a single event loop:
 
 ```
 main.py
-├── ModbusController.run()   — polls Modbus TCP every 20 s
-├── BsbController.run()      — polls UART every 20 ms, dispatches telegrams
-└── RestServer.run()         — microdot HTTP server, awaits BSB/Modbus on each request
+├── ThermostatController.run()  — evaluates relay rules every 30 s
+├── BsbController.run()         — polls UART every 20 ms, dispatches telegrams
+└── RestServer.run()            — microdot HTTP server, awaits BSB on each request
 ```
 
 The REST server routes `await` directly into `BsbController.get_field()` / `set_field()`, which suspend on `asyncio.Event` until the BSB response telegram arrives (or a 5 s timeout expires). This keeps the HTTP handler and the UART reader decoupled with no shared mutable state beyond the `_pending` dict.
 
-**Shutdown order** (on `CancelledError`): REST → BSB → Modbus. The REST server is stopped first so no new requests can arrive while the lower layers are tearing down.
+**Shutdown order** (on `CancelledError`): REST → BSB → Thermostat. The REST server is stopped first so no new requests can arrive while the lower layers are tearing down.
 
-## Control Logic (`modbus.py`)
-- Poll interval: **20 s**
-- Hysteresis: **±0.5 °C**
-- Relay **ON** (heating) when `current_temp < target_temp − 0.5`
-- Relay **OFF** when `current_temp > target_temp + 0.5`
-- Default target: **22.0 °C**
-- On startup: all relays reset to OFF (`RESET = True`)
+## Modbus I/O Driver (`modbus.py`)
+`modbus.py` is a pure I/O driver with no control logic.
 
-## BSB Protocol Layer (`bsb_protocol.py`)
+- `ModbusDevice` — wraps `umodbus.tcp.TCP`; holds IP, port, node ID
+- `RoomConfig` — holds references to a temperature device/register and a relay device/register; exposes `current_temperature`, `relay_status`, `set_relay_status()`, `update_relay_status()`
+- `ModbusController` — instantiated from `config/modbus.json`; owns the `devices` and `rooms` dicts used by `ThermostatController`
+
+## Thermostat Controller (`thermostat.py`)
+Owns all relay-decision logic.
+
+### Data model
+- `RoomState` — per-room snapshot: `name`, `current_temperature`, `target_temperature`, `relay_on`
+- `SystemContext` — shared per poll cycle: `bsb_data` (dict of BSB field values), `energy_price` (reserved for future use, always `None` in phase 1)
+
+### Rule chain
+A rule is a callable `(RoomState, SystemContext) -> bool | None`:
+- `True` → relay ON, `False` → relay OFF, `None` → abstain (pass to next rule)
+- Rules are evaluated in order; the **first non-`None` result** wins
+- If **all rules abstain**, the relay is left in its current hardware state
+
+**Phase 1 rule registered by default:**
+
+| Rule | Logic |
+|------|-------|
+| `basic_hysteresis` | ON if `deviation < −0.5 °C`; OFF if `deviation > +0.5 °C`; abstain inside dead band |
+
+### Target temperature persistence
+- Stored in `state/thermostat_state.json` (JSON dict of room → float)
+- Written on every `set_target_temperature()` call
+- Loaded on startup; falls back to the default from `config/modbus.json` if the file is absent or corrupt
+
+### Constants (top of file)
+| Name | Default | Meaning |
+|------|---------|--------|
+| `POLL_INTERVAL` | 30 s | Thermostat evaluation cadence |
+| `HYSTERESIS` | 0.5 °C | Dead band half-width |
+
+## BSB Protocol Layer (`bsb/protocol.py`)
 Ported from [bsbgateway](https://github.com/loehnertj/bsbgateway); adapted for MicroPython:
 
 - **Transport**: UART2, 4800 baud, 8 data bits, odd parity, 1 stop bit
@@ -72,9 +103,9 @@ Ported from [bsbgateway](https://github.com/loehnertj/bsbgateway); adapted for M
   `TimeProgram` disabled slots (`0x80` marker) are skipped on decode; encode pads unused slots with `0x80 00 00 00`.  
   `String` and `TimeProgram` have no flag byte on the wire; all other types carry a 1-byte flag prefix (`0x00` = value, `0x01`/`0x05`/`0x06` = null or set variants).
 
-- **`attrs`/`cattr` absent in MicroPython** — all model classes replaced with plain `__init__`-based classes
+- All model classes use plain `__init__`-based construction (no `attrs`/`cattr`)
 
-## BSB Controller (`bsb.py`)
+## BSB Controller (`bsb/bsb.py`)
 - Loads `config/bsb.json` (own address `0x42`, dest `0x00`, field whitelist)
 - Loads field definitions via `bsb_fields.load_fields()` at startup (synchronous, before event loop)
 - Builds two lookup dicts: `_commands[field_id]` and `_commands_by_tid[telegram_id_int]`
@@ -83,20 +114,21 @@ Ported from [bsbgateway](https://github.com/loehnertj/bsbgateway); adapted for M
 - Incomplete telegrams preserved as `_leftover` between poll cycles (trailing non-`BsbTelegram` items from `deserialize()`)
 - Pending requests keyed by `telegram_id_int`; response matched on `ret`/`ack` packet type
 
-## BSB Field Model (`bsb_fields.py`)
-- Reads `bsbgateway/devices/my_personal_device.json` and `bsbgateway/src/bsbgateway/bsb/bsb-types.json`
+## BSB Field Model (`bsb/fields.py`)
+- Reads `config/bsb_fields.cfg`, `config/bsb_enums.cfg`, and `config/bsb-types.json`
 - Extracts only whitelisted field IDs — avoids loading the full (large) device model on the ESP32
 - Resolves type definitions, global enum references, and I18nstr names (prefers "DE", falls back to "EN")
 - Returns compact dicts; `bsb.py` converts these to `BsbCommand`/`BsbType` objects
 
 ## REST API (`restserver.py`)
-Replaced `tinyweb` with **microdot** for native async support, cleaner JSON handling, and active maintenance.
+Uses **microdot** for native async support and JSON handling.
 
 | Method | Endpoint | Body / Response |
 |--------|----------|-----------------|
 | GET | `/current_temperature/<room>` | `{"current_temperature": float}` |
 | GET | `/target_temperature/<room>` | `{"target_temperature": float}` |
 | POST | `/target_temperature/<room>` | `{"target_temperature": float}` → `{"message": "updated"}` |
+| GET | `/relay_status/<room>` | `{"relay_status": bool}` |
 | GET | `/bsb/field/<id>` | `{"id": int, "name": str, "value": any, "unit": str}` |
 | POST | `/bsb/field/<id>` | `{"value": any}` → `{"message": "updated"}` |
 
@@ -104,9 +136,9 @@ Room names match keys in `config/modbus.json`. Field IDs match keys in `config/b
 
 All route handlers are `async def`; dicts returned directly (microdot auto-serializes to JSON).
 
-`RestServer.__init__` takes both `modbus_controller` and `bsb_controller`. BSB routes convert the URL `<field_id>` string to `int` and return `404` for unknown field IDs or `504` on BSB bus timeout.
+`RestServer.__init__` takes `thermostat_controller` and `bsb_controller`. Room routes read state from `ThermostatController.rooms`; `POST /target_temperature` calls `set_target_temperature()` (which also persists). BSB routes convert the URL `<field_id>` string to `int` and return `404` for unknown field IDs or `504` on BSB bus timeout.
 
 ## External Libraries (not in repo)
 - `umodbus/` — Modbus TCP master
-- `tinyweb/` — async HTTP server (superseded by microdot, kept on filesystem)
+- `microdot/` — async HTTP server
 - `typings/` — MicroPython stubs (dev only)
