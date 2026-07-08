@@ -1,13 +1,8 @@
-import asyncio
 import json
 
 from umodbus.tcp import TCP as ModbusTCPMaster
 
 CONFIG_FILE = "config/modbus.json"
-
-HYSTERESIS = 0.5  # degrees Celsius
-
-RESET = True  # For Testing: reset all relays on startup
 
 
 class ModbusDevice:
@@ -96,33 +91,4 @@ class ModbusController:
                 relay_register=room_config["relay"]["register"],
             )
 
-    async def run(self):
-        """Continously read temperature and relay statuses."""
-        if RESET:
-            for room in self.rooms.values():
-                room.set_relay_status(False)
-                await asyncio.sleep(0.5)
-                room.update_relay_status()
-        print("Starting Modbus controller")
-        while True:
-            # configure Modbus TCP master/host
-            for room_name, room in self.rooms.items():
-                room._current_temperature = room._read_current_temperature()
 
-                if abs(temperature_deviation := (room._current_temperature - room.target_temperature)) < HYSTERESIS:
-                    continue
-
-                relay_updated = False
-                if temperature_deviation > 0 and room.relay_status:
-                    room.set_relay_status(False)
-                    relay_updated = True
-                elif temperature_deviation < 0 and not room.relay_status:
-                    room.set_relay_status(True)
-                    relay_updated = True
-
-                if relay_updated:
-                    room.update_relay_status()
-                    await asyncio.sleep(0.5)  # wait a bit for the relay to update
-                    print("Relay {} turned {}".format(room_name, "On" if room.relay_status else "Off"))
-
-            await asyncio.sleep(20)

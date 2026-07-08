@@ -4,6 +4,9 @@ __pycache__/
 # config files
 config/
 
+# runtime state
+state/
+
 # Distribution / packaging
 typings/
 umodbus/

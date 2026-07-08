@@ -1,13 +1,13 @@
 import asyncio
 
 import bsb
-import modbus
+import thermostat
 from microdot import Microdot
 
 
 class RestServer:
-    def __init__(self, modbus_controller: modbus.ModbusController, bsb_controller: bsb.BsbController):
-        self.modbus_controller = modbus_controller
+    def __init__(self, thermostat_controller: thermostat.ThermostatController, bsb_controller: bsb.BsbController):
+        self.thermostat_controller = thermostat_controller
         self.bsb_controller = bsb_controller
         self.app = Microdot()
 
@@ -17,21 +17,21 @@ class RestServer:
 
         @self.app.route("/current_temperature/<room>", methods=["GET"])
         async def get_current_temperature(request, room):
-            if room not in self.modbus_controller.rooms:
+            if room not in self.thermostat_controller.rooms:
                 return {"message": "no such room"}, 404
-            return {"current_temperature": self.modbus_controller.rooms[room].current_temperature}
+            return {"current_temperature": self.thermostat_controller.rooms[room].current_temperature}
 
         @self.app.route("/target_temperature/<room>", methods=["GET"])
         async def get_target_temperature(request, room):
-            if room not in self.modbus_controller.rooms:
+            if room not in self.thermostat_controller.rooms:
                 return {"message": "no such room"}, 404
-            return {"target_temperature": self.modbus_controller.rooms[room].target_temperature}
+            return {"target_temperature": self.thermostat_controller.rooms[room].target_temperature}
 
         @self.app.route("/target_temperature/<room>", methods=["POST"])
         async def post_target_temperature(request, room):
-            if room not in self.modbus_controller.rooms:
+            if room not in self.thermostat_controller.rooms:
                 return {"message": "no such room"}, 404
-            self.modbus_controller.rooms[room].target_temperature = request.json["target_temperature"]
+            self.thermostat_controller.set_target_temperature(room, request.json["target_temperature"])
             return {"message": "updated"}
 
         @self.app.route("/bsb/field/<field_id>", methods=["GET"])
