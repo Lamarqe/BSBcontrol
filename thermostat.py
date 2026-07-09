@@ -73,13 +73,14 @@ class ThermostatController:
     async def run(self) -> None:
         print("Starting Thermostat controller")
         while True:
-            # 1. Refresh temperatures and relay states from hardware
+            # 1. Refresh temperatures from hardware
             for room_name, room_cfg in self._modbus.rooms.items():
-                room_cfg._current_temperature = room_cfg._read_current_temperature()
-                room_cfg.update_relay_status()
-                room = self.rooms[room_name]
-                room.current_temperature = room_cfg.current_temperature
-                room.relay_on = room_cfg.relay_status
+                try:
+                    room_cfg._current_temperature = room_cfg._read_current_temperature()
+                    room = self.rooms[room_name]
+                    room.current_temperature = room_cfg.current_temperature
+                except OSError as e:
+                    print("WARNING: temperature read failed for {}: {}".format(room_name, e))
 
             # 2. Build system context (BSB data and energy price reserved for future rules)
             ctx = SystemContext(bsb_data={}, energy_price=None)
@@ -97,10 +98,10 @@ class ThermostatController:
 
                 if decision != room.relay_on:
                     room_cfg = self._modbus.rooms[room_name]
-                    room_cfg.set_relay_status(decision)
-                    await asyncio.sleep(0.5)  # wait for relay to settle
-                    room_cfg.update_relay_status()
-                    room.relay_on = room_cfg.relay_status
-                    print("Relay {} turned {}".format(room_name, "On" if room.relay_on else "Off"))
+                    try:
+                        room.relay_on = room_cfg.set_relay_status(decision)
+                        print("Relay {} turned {}".format(room_name, "On" if room.relay_on else "Off"))
+                    except OSError as e:
+                        print("WARNING: relay write failed for {}: {}".format(room_name, e))
 
             await asyncio.sleep(POLL_INTERVAL)

@@ -30,13 +30,20 @@ class RoomConfig:
         self._current_temperature: float = self._read_current_temperature()
         self._relay_status: bool = self._read_relay_status()
 
-    def set_relay_status(self, status: bool) -> None:
-        """Set the relay status."""
-        self._relay_device.master.write_single_coil(
+    def set_relay_status(self, status: bool) -> bool:
+        """Set the relay status and return the value written.
+
+        Raises OSError if the device does not confirm the write.
+        """
+        success = self._relay_device.master.write_single_coil(
             slave_addr=self._relay_device.node_id,
             output_address=self._relay_register,
             output_value=status,
         )
+        if not success:
+            raise OSError("write_single_coil not confirmed by device")
+        self._relay_status = status
+        return status
 
     def _read_relay_status(self) -> bool:
         """Read the current status of the relay."""
