@@ -8,13 +8,24 @@ import modbus
 import thermostat
 
 
+MODBUS_RETRY_INTERVAL = 10  # seconds between connection attempts
+
+
 async def async_main():
     try:
-        modbus_controller = modbus.ModbusController()
         bsb_controller = bsb.BsbController()
-        thermostat_controller = thermostat.ThermostatController(modbus_controller, bsb_controller)
-        thermostat_task = asyncio.create_task(thermostat_controller.run())
         bsb_task = asyncio.create_task(bsb_controller.run())
+
+        while True:
+            try:
+                modbus_controller = modbus.ModbusController()
+                thermostat_controller = thermostat.ThermostatController(modbus_controller, bsb_controller)
+                break
+            except OSError as e:
+                print("Modbus init failed ({}), retrying in {} s...".format(e, MODBUS_RETRY_INTERVAL))
+                await asyncio.sleep(MODBUS_RETRY_INTERVAL)
+
+        thermostat_task = asyncio.create_task(thermostat_controller.run())
         rest_server = restserver.RestServer(thermostat_controller, bsb_controller)
         rest_task = asyncio.create_task(rest_server.run())
         while True:
