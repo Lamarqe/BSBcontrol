@@ -12,8 +12,28 @@ CONFIG_FILE = "config/bsb.json"
 TYPES_FILE  = "config/bsb-types.json"
 
 DEBUG = False
+LISTEN = False
 REQUEST_TIMEOUT = 5.0
 POLL_INTERVAL = 0.02
+
+
+def _listen_rx(telegram):
+    """Print a received BSB telegram in compact, human-readable form."""
+    cmd = telegram.command
+    ptype = telegram.packettype.upper()
+    src = telegram.src
+    dst = telegram.dst
+    if cmd.bsb_type and cmd.bsb_type.name == "RAW":
+        raw = " ".join("%02X" % b for b in telegram.rawdata) if telegram.rawdata else "-"
+        print("[LISTEN] %s %d->%d tid=0x%08X raw=%s" % (ptype, src, dst, cmd.telegram_id, raw))
+    elif telegram.packettype in ("get", "ack"):
+        print("[LISTEN] %s %d->%d #%s %s" % (ptype, src, dst, cmd.parameter, cmd.disp_name))
+    else:
+        value = telegram.data
+        if cmd.enum and isinstance(value, int) and value in cmd.enum:
+            value = cmd.enum[value]
+        unit = (" " + cmd.unit) if cmd.unit else ""
+        print("[LISTEN] %s %d->%d #%s %s = %s%s" % (ptype, src, dst, cmd.parameter, cmd.disp_name, value, unit))
 
 
 def _build_commands(fields_raw, type_meta):
@@ -88,6 +108,8 @@ class BsbController:
                 self._dispatch(item)
 
     def _dispatch(self, telegram):
+        if LISTEN:
+            _listen_rx(telegram)
         if DEBUG:
             print("[BSB] rx: type=%s tid=0x%08X src=0x%02X dst=0x%02X data=%r raw=%s" % (
                 telegram.packettype,
@@ -125,6 +147,8 @@ class BsbController:
                 packettype="get",
             )
             raw_tx = telegram.serialize(validate=False)
+            if LISTEN:
+                print("[LISTEN] GET %d->%d #%s %s" % (self.own_address, self.dest_address, cmd.parameter, cmd.disp_name))
             if DEBUG:
                 print("[BSB] tx: GET field=%d tid=0x%08X dst=0x%02X bytes=%s" % (
                     field_id,
@@ -159,6 +183,9 @@ class BsbController:
                 packettype="set",
                 data=value,
             )
+            if LISTEN:
+                unit = (" " + cmd.unit) if cmd.unit else ""
+                print("[LISTEN] SET %d->%d #%s %s = %s%s" % (self.own_address, self.dest_address, cmd.parameter, cmd.disp_name, value, unit))
             self._uart.write(invert(telegram.serialize()))
             await asyncio.wait_for(event.wait(), REQUEST_TIMEOUT)
             t = result[0]
