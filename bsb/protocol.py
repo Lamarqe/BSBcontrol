@@ -244,9 +244,10 @@ def _decode_vals(data, bsb_type):
 
 
 def _decode_enum(data, bsb_type):
-    assert bsb_type.payload_length == 1
-    assert len(data) == 1
-    (val,) = struct.unpack("B", data)
+    assert bsb_type.payload_length in (1, 2)
+    assert len(data) == bsb_type.payload_length
+    fmt = "B" if bsb_type.payload_length == 1 else ">H"
+    (val,) = struct.unpack(fmt, data)
     return val
 
 
@@ -406,10 +407,12 @@ def _encode_vals(data, bsb_type):
 def _encode_enum(data, bsb_type):
     if not isinstance(data, int):
         raise EncodeError("Expected int for enum, got %s" % type(data).__name__)
-    if data < 0 or data > 255:
-        raise EncodeError("Enum value %d out of range [0, 255]" % data)
-    assert bsb_type.payload_length == 1
-    return struct.pack("B", data)
+    assert bsb_type.payload_length in (1, 2)
+    max_val = 255 if bsb_type.payload_length == 1 else 65535
+    if data < 0 or data > max_val:
+        raise EncodeError("Enum value %d out of range [0, %d]" % (data, max_val))
+    fmt = "B" if bsb_type.payload_length == 1 else ">H"
+    return struct.pack(fmt, data)
 
 
 def _encode_dt(data, bsb_type):
