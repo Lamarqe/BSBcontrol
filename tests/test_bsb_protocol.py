@@ -238,6 +238,28 @@ def test_encode_enum_invalid_value_raises():
         encode(99, enum, cmd, validate=True)
 
 
+def test_encode_enum_string_label_resolved_to_int():
+    """Passing a string label should be silently resolved to the integer index."""
+    cmd = _cmd(enum={0: "Schutz", 1: "Automatik", 3: "Komfort"})
+    result = encode("Automatik", enum, cmd, validate=True)
+    # flag byte (0x01) + payload byte (0x01)
+    assert result == bytes([0x01, 0x01])
+
+
+def test_encode_enum_string_label_zero_resolved():
+    """Label for index 0 (falsy) must resolve correctly."""
+    cmd = _cmd(enum={0: "Schutz", 1: "Automatik"})
+    result = encode("Schutz", enum, cmd, validate=True)
+    assert result == bytes([0x01, 0x00])
+
+
+def test_encode_enum_unknown_string_label_raises():
+    """An unrecognised string label must raise ValidateError."""
+    cmd = _cmd(enum={0: "off", 1: "on"})
+    with pytest.raises(ValidateError):
+        encode("maybe", enum, cmd, validate=True)
+
+
 def test_encode_below_min_raises():
     cmd = _cmd(min_value=0.0, max_value=100.0)
     with pytest.raises(ValidateError):

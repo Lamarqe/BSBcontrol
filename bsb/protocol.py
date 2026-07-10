@@ -316,6 +316,15 @@ def _decode_timeprogram(data):
 # ---------------------------------------------------------------------------
 
 def encode(data, bsb_type, command, validate=True, packettype="set"):
+    # Resolve string label to integer index for enum fields
+    if command.enum and isinstance(data, str):
+        reverse = {v: k for k, v in command.enum.items()}
+        if data not in reverse:
+            raise ValidateError(
+                "Unknown enum label %r. Valid labels: %s" % (data, list(reverse.keys()))
+            )
+        data = reverse[data]
+
     if validate:
         if command.flags & BsbCommandFlags.Readonly:
             raise ValidateError("Command is read-only")

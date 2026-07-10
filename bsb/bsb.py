@@ -135,7 +135,10 @@ class BsbController:
             self._uart.write(invert(raw_tx))
             await asyncio.wait_for(event.wait(), REQUEST_TIMEOUT)
             t = result[0]
-            return {"id": field_id, "name": cmd.disp_name, "value": t.data, "unit": cmd.unit}
+            value = t.data
+            if cmd.enum and isinstance(value, int) and value in cmd.enum:
+                value = cmd.enum[value]
+            return {"id": field_id, "name": cmd.disp_name, "value": value, "unit": cmd.unit}
         finally:
             self._pending.pop(cmd.telegram_id, None)
 
