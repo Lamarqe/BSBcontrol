@@ -48,6 +48,18 @@ def convert_flags(flags: int) -> list[str]:
     print("Unsupported flag format")
     return []
 
+def eval_flags(flags) -> int:
+    """Recursively evaluate a pycparser flags expression to a plain integer."""
+    if isinstance(flags, Constant):
+        return int(flags.value, 0)
+    elif isinstance(flags, BinaryOp):
+        if flags.op == '+':
+            return eval_flags(flags.left) + eval_flags(flags.right)
+        elif flags.op == '<<':
+            return eval_flags(flags.left) << eval_flags(flags.right)
+    return 0
+
+
 def get_enum(enumstr):
     enum_to_decode = enumstr.init.exprs[0].value
     enum_to_decode = get_string(enumstr.init.exprs[0])
@@ -137,11 +149,15 @@ def main():
 
             command = create_command(line, cmd, desc, flags)
             command["type"] = type.name[3:]
+            # FL_ENUM_X_2: bits 20-23 of flags encode the enum key width in bytes.
+            # Y == 2 means the enum key is 2 bytes wide -> use ENUM_WORD.
+            if command["type"] == "ENUM" and (eval_flags(flags) >> 20) & 0xF == 2:
+                command["type"] = "ENUM_WORD"
             cat_name = category_for_param(command["parameter"], categories)
             if cat_name:
                 command["name"] = command["name"] + " " + cat_name
 
-            if command["type"] == "ENUM":
+            if command["type"] in ("ENUM", "ENUM_WORD"):
                 enum_name = enumstr.name
                 if enum_name not in enums:
                     enums[enum_name] = get_enum(get_c_variable(enumstr.name))
@@ -156,7 +172,7 @@ def main():
         with open("config/bsb_fields.cfg", "w") as f:
             for command in bsb_commands:
                 record = {"cmd": command["cmd"], "name": command["name"], "type": command["type"]}
-                if command["type"] == "ENUM":
+                if command["type"] in ("ENUM", "ENUM_WORD"):
                     record["enum"] = command["enum"]
                 if command["readonly"]:
                     record["readonly"] = True
