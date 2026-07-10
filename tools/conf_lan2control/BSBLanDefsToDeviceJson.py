@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 from pycparser.c_ast import Constant, Decl, FileAST, ID, InitList, BinaryOp
 import json
@@ -61,6 +62,30 @@ def get_enum(enumstr):
       enum_dict[str(key)] = value
     return enum_dict
 
+def get_categories(enum_cat_nr_var, enum_cat_var):
+    """Returns list of (min, max, name) tuples for each category index."""
+    nr_exprs = enum_cat_nr_var.init.exprs
+    ranges = [(float(nr_exprs[i].value), float(nr_exprs[i+1].value))
+              for i in range(0, len(nr_exprs) - 1, 2)]
+    cat_str = get_string(enum_cat_var.init.exprs[0])
+    cat_names = {}
+    for entry in cat_str.split('\\0'):
+        if not entry:
+            continue
+        key_part, _, name = entry.partition(' ')
+        m = re.match(r'\\x([0-9A-Fa-f]{2})', key_part)
+        if m:
+            cat_names[int(m.group(1), 16)] = name
+    return [(lo, hi, cat_names.get(i, '')) for i, (lo, hi) in enumerate(ranges)]
+
+
+def category_for_param(param_nr, categories):
+    for lo, hi, name in categories:
+        if lo <= param_nr <= hi:
+            return name
+    return ''
+
+
 def create_command(line, cmd, desc, flags) -> dict:
     flags_list = convert_flags(flags)
     return {
@@ -79,6 +104,7 @@ def main():
         home_dir = os.environ.get('HOME')
         g_AST = pycparser.parse_file(fp.name, use_cpp=True, cpp_args= [r'-Itools/conf_lan2control', r'-I' + home_dir + '/BSB-LAN/BSB_LAN',r'-I/usr/share/python3-pycparser/fake_libc_include'])
         supported_cmd_types = json.loads(open('config/bsb-types.json').read())
+        categories = get_categories(get_c_variable("ENUM_CAT_NR"), get_c_variable("ENUM_CAT"))
         cmdtbl = get_c_variable("cmdtbl")
 
         if not isinstance(cmdtbl, Decl) or cmdtbl.name != "cmdtbl":
@@ -111,6 +137,9 @@ def main():
 
             command = create_command(line, cmd, desc, flags)
             command["type"] = type.name[3:]
+            cat_name = category_for_param(command["parameter"], categories)
+            if cat_name:
+                command["name"] = command["name"] + " " + cat_name
 
             if command["type"] == "ENUM":
                 enum_name = enumstr.name
