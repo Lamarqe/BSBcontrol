@@ -2,7 +2,6 @@ import json
 
 import machine
 import network
-import webrepl
 from network import LAN, WLAN
 
 nw_config = json.load(open("config/network.json"))
@@ -31,4 +30,3 @@ if not lan.isconnected():
             pass
     print("network config:", wlan.ifconfig())
 
-webrepl.start(password="1234")
