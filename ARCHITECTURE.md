@@ -138,6 +138,19 @@ All route handlers are `async def`; dicts returned directly (microdot auto-seria
 
 `RestServer.__init__` takes `thermostat_controller` and `bsb_controller`. Room routes read state from `ThermostatController.rooms`; `POST /target_temperature` calls `set_target_temperature()` (which also persists). BSB routes convert the URL `<field_id>` string to `int` and return `404` for unknown field IDs or `504` on BSB bus timeout.
 
+### BSB enum field behaviour
+
+`GET /bsb/field/<id>` returns the **string label** for enum fields (e.g. `"Automatik"` instead of `1`). If the raw integer from the device is not found in the enum dict, the integer is returned as-is.
+
+`POST /bsb/field/<id>` accepts either the **string label** or the **raw integer index**:
+
+```json
+{"value": "Automatik"}   ← resolved to index 1 before encoding
+{"value": 1}             ← passed directly
+```
+
+An unrecognised string label returns `404` with `{"message": "…"}`. The API is therefore symmetric: GET and POST use the same string labels.
+
 ## External Libraries (not in repo)
 - `umodbus/` — Modbus TCP master
 - `microdot/` — async HTTP server
