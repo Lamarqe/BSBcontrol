@@ -8,8 +8,18 @@ CONFIG_FILE = "config/modbus.json"
 class ModbusDevice:
     def __init__(self, ip: str, port: int, node_id: int):
         """Initialize Modbus device with IP, port, and node ID."""
-        self.master = ModbusTCPMaster(slave_ip=ip, slave_port=port)
+        self._ip = ip
+        self._port = port
         self.node_id = node_id
+        self.master = ModbusTCPMaster(slave_ip=ip, slave_port=port)
+
+    def reconnect(self) -> None:
+        """Close the existing socket and open a fresh TCP connection."""
+        try:
+            self.master._sock.close()
+        except Exception:
+            pass
+        self.master = ModbusTCPMaster(slave_ip=self._ip, slave_port=self._port)
 
 
 class RoomConfig:
