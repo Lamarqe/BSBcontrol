@@ -84,6 +84,7 @@ class BsbController:
         self._uart = machine.UART(2, rx=36, tx=5, baudrate=4800, parity=1, stop=1, bits=8)
         self._leftover = b""
         self._pending = {}  # tid_int -> {"event": Event, "result": list}
+        self._bus_lock = asyncio.Lock()
 
     async def run(self):
         print("Starting BSB controller")
@@ -138,62 +139,64 @@ class BsbController:
         if cmd is None:
             raise ValueError("Unknown field_id: %d" % field_id)
 
-        event = asyncio.Event()
-        result = []
-        self._pending[cmd.telegram_id] = {"event": event, "result": result}
+        async with self._bus_lock:
+            event = asyncio.Event()
+            result = []
+            self._pending[cmd.telegram_id] = {"event": event, "result": result}
 
-        try:
-            telegram = BsbTelegram(
-                command=cmd,
-                src=self.own_address,
-                dst=self.dest_address,
-                packettype="get",
-            )
-            raw_tx = telegram.serialize(validate=False)
-            if LISTEN:
-                print("[LISTEN] GET %d->%d #%s %s" % (self.own_address, self.dest_address, cmd.parameter, cmd.disp_name))
-            if DEBUG:
-                print("[BSB] tx: GET field=%d tid=0x%08X dst=0x%02X bytes=%s" % (
-                    field_id,
-                    cmd.telegram_id,
-                    self.dest_address,
-                    " ".join("%02X" % b for b in invert(raw_tx)),
-                ))
-            self._uart.write(invert(raw_tx))
-            await asyncio.wait_for(event.wait(), REQUEST_TIMEOUT)
-            t = result[0]
-            value = t.data
-            if cmd.enum and isinstance(value, int) and value in cmd.enum:
-                value = cmd.enum[value]
-            return {"id": field_id, "name": cmd.disp_name, "value": value, "unit": cmd.unit}
-        finally:
-            self._pending.pop(cmd.telegram_id, None)
+            try:
+                telegram = BsbTelegram(
+                    command=cmd,
+                    src=self.own_address,
+                    dst=self.dest_address,
+                    packettype="get",
+                )
+                raw_tx = telegram.serialize(validate=False)
+                if LISTEN:
+                    print("[LISTEN] GET %d->%d #%s %s" % (self.own_address, self.dest_address, cmd.parameter, cmd.disp_name))
+                if DEBUG:
+                    print("[BSB] tx: GET field=%d tid=0x%08X dst=0x%02X bytes=%s" % (
+                        field_id,
+                        cmd.telegram_id,
+                        self.dest_address,
+                        " ".join("%02X" % b for b in invert(raw_tx)),
+                    ))
+                self._uart.write(invert(raw_tx))
+                await asyncio.wait_for(event.wait(), REQUEST_TIMEOUT)
+                t = result[0]
+                value = t.data
+                if cmd.enum and isinstance(value, int) and value in cmd.enum:
+                    value = cmd.enum[value]
+                return {"id": field_id, "name": cmd.disp_name, "value": value, "unit": cmd.unit}
+            finally:
+                self._pending.pop(cmd.telegram_id, None)
 
     async def set_field(self, field_id, value):
         cmd = self._commands.get(field_id)
         if cmd is None:
             raise ValueError("Unknown field_id: %d" % field_id)
 
-        event = asyncio.Event()
-        result = []
-        self._pending[cmd.telegram_id] = {"event": event, "result": result}
+        async with self._bus_lock:
+            event = asyncio.Event()
+            result = []
+            self._pending[cmd.telegram_id] = {"event": event, "result": result}
 
-        try:
-            telegram = BsbTelegram(
-                command=cmd,
-                src=self.own_address,
-                dst=self.dest_address,
-                packettype="set",
-                data=value,
-            )
-            if LISTEN:
-                unit = (" " + cmd.unit) if cmd.unit else ""
-                print("[LISTEN] SET %d->%d #%s %s = %s%s" % (self.own_address, self.dest_address, cmd.parameter, cmd.disp_name, value, unit))
-            self._uart.write(invert(telegram.serialize()))
-            await asyncio.wait_for(event.wait(), REQUEST_TIMEOUT)
-            t = result[0]
-            if t.packettype != "ack":
-                raise RuntimeError("Expected ACK, got %s" % t.packettype)
-            return {"message": "updated"}
-        finally:
-            self._pending.pop(cmd.telegram_id, None)
+            try:
+                telegram = BsbTelegram(
+                    command=cmd,
+                    src=self.own_address,
+                    dst=self.dest_address,
+                    packettype="set",
+                    data=value,
+                )
+                if LISTEN:
+                    unit = (" " + cmd.unit) if cmd.unit else ""
+                    print("[LISTEN] SET %d->%d #%s %s = %s%s" % (self.own_address, self.dest_address, cmd.parameter, cmd.disp_name, value, unit))
+                self._uart.write(invert(telegram.serialize()))
+                await asyncio.wait_for(event.wait(), REQUEST_TIMEOUT)
+                t = result[0]
+                if t.packettype != "ack":
+                    raise RuntimeError("Expected ACK, got %s" % t.packettype)
+                return {"message": "updated"}
+            finally:
+                self._pending.pop(cmd.telegram_id, None)
