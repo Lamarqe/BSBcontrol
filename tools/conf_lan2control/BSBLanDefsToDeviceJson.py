@@ -105,7 +105,7 @@ def create_command(line, cmd, desc, flags) -> dict:
         "cmd":       cmd.value,
         "name":      get_string(get_c_variable(desc.name).init),
         "type":      "ENUM",  # default, overridden in main loop
-        "readonly":  "READONLY" in flags_list or "SW_CTL_RONLY" in flags_list,
+        "readonly":  "READONLY" in flags_list,
     }
 
 def main():
