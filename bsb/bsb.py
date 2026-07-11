@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import json
 
 import machine
@@ -77,6 +78,8 @@ class BsbController:
         type_meta = json.load(open(TYPES_FILE))
         fields_raw = BsBConfigReader().load_fields(config["fields"])
         self._commands, self._commands_by_tid = _build_commands(fields_raw, type_meta)
+        del type_meta, fields_raw
+        gc.collect()
 
         self._uart = machine.UART(2, rx=36, tx=5, baudrate=4800, parity=1, stop=1, bits=8)
         self._leftover = b""
