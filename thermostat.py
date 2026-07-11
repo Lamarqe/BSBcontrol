@@ -81,6 +81,11 @@ class ThermostatController:
                     room.current_temperature = room_cfg.current_temperature
                 except OSError as e:
                     print("WARNING: temperature read failed for {}: {}".format(room_name, e))
+                    try:
+                        room_cfg._temp_device.reconnect()
+                    except OSError as re:
+                        print("WARNING: reconnect failed for {}: {}".format(room_name, re))
+                await asyncio.sleep(0)  # yield after each room so Microdot can run
 
             # 2. Build system context (BSB data and energy price reserved for future rules)
             ctx = SystemContext(bsb_data={}, energy_price=None)
