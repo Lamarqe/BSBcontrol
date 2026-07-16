@@ -108,5 +108,9 @@ class ThermostatController:
                         print("Relay {} turned {}".format(room_name, "On" if room.relay_on else "Off"))
                     except OSError as e:
                         print("WARNING: relay write failed for {}: {}".format(room_name, e))
+                        try:
+                            room_cfg._relay_device.reconnect()
+                        except OSError as re:
+                            print("WARNING: relay reconnect failed for {}: {}".format(room_name, re))
 
             await asyncio.sleep(POLL_INTERVAL)
