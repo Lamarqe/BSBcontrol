@@ -71,6 +71,14 @@ def _build_commands(fields_raw, type_meta):
 
 class BsbController:
     def __init__(self):
+        # UART2 is pre-initialized in boot.py before the network stack to secure
+        # contiguous DMA memory. Here we only obtain a reference without reinstalling
+        # the driver (no parameters = no uart_driver_delete/install on ESP32).
+        self._uart = machine.UART(2)
+        self._leftover = b""
+        self._pending = {}  # tid_int -> {"event": Event, "result": list}
+        self._bus_lock = asyncio.Lock()
+
         config = json.load(open(CONFIG_FILE))
         self.own_address = config["own_address"]
         self.dest_address = config["dest_address"]
@@ -80,11 +88,6 @@ class BsbController:
         self._commands, self._commands_by_tid = _build_commands(fields_raw, type_meta)
         del type_meta, fields_raw
         gc.collect()
-
-        self._uart = machine.UART(2, rx=36, tx=5, baudrate=4800, parity=1, stop=1, bits=8)
-        self._leftover = b""
-        self._pending = {}  # tid_int -> {"event": Event, "result": list}
-        self._bus_lock = asyncio.Lock()
 
     async def run(self):
         print("Starting BSB controller")
