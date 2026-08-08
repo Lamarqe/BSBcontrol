@@ -92,11 +92,15 @@ class BsbController:
     async def run(self):
         print("Starting BSB controller")
         while True:
-            n = self._uart.any()
-            if n > 0:
-                raw = invert(self._uart.read(n))
-                self._leftover += raw
-                self._process_buffer()
+            try:
+                n = self._uart.any()
+                if n > 0:
+                    raw = invert(self._uart.read(n))
+                    self._leftover += raw
+                    self._process_buffer()
+            except OSError as e:
+                print("WARNING: BSB UART read failed ({}), continuing...".format(e))
+                self._leftover = b""
             await asyncio.sleep(POLL_INTERVAL)
 
     def _process_buffer(self):

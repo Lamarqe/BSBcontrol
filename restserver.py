@@ -48,6 +48,8 @@ class RestServer:
                 return {"message": "unknown field"}, 404
             except asyncio.TimeoutError:
                 return {"message": "timeout"}, 504
+            except OSError as e:
+                return {"message": "bus error: {}".format(e)}, 503
             return result
 
         @self.app.route("/bsb/field/<field_id>", methods=["POST"])
@@ -58,6 +60,8 @@ class RestServer:
                 return {"message": str(e)}, 404
             except asyncio.TimeoutError:
                 return {"message": "timeout"}, 504
+            except OSError as e:
+                return {"message": "bus error: {}".format(e)}, 503
             return result
 
     async def run(self):
