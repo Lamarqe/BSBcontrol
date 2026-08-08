@@ -13,7 +13,7 @@ CONFIG_FILE = "config/bsb.json"
 TYPES_FILE  = "config/bsb-types.json"
 
 DEBUG = False
-LISTEN = False
+LISTEN = True
 REQUEST_TIMEOUT = 5.0
 POLL_INTERVAL = 0.02
 

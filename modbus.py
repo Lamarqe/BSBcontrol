@@ -94,18 +94,33 @@ class ModbusController:
         config = json.load(open(CONFIG_FILE))
         modbus_config = config["devices"]
         self.devices: dict[str, ModbusDevice] = {}
-        for device_name, device_config in modbus_config.items():
-            self.devices[device_name] = ModbusDevice(
-                ip=device_config["ip"], port=device_config["port"], node_id=device_config["node_id"]
-            )
-
         self.rooms: dict[str, RoomConfig] = {}
-        for room_name, room_config in config["rooms"].items():
-            self.rooms[room_name] = RoomConfig(
-                temperature_device=self.devices[room_config["temperature_sensor"]["device"]],
-                temperature_register=room_config["temperature_sensor"]["register"],
-                relay_device=self.devices[room_config["relay"]["device"]],
-                relay_register=room_config["relay"]["register"],
-            )
+        try:
+            for device_name, device_config in modbus_config.items():
+                self.devices[device_name] = ModbusDevice(
+                    ip=device_config["ip"], port=device_config["port"], node_id=device_config["node_id"]
+                )
+
+            for room_name, room_config in config["rooms"].items():
+                self.rooms[room_name] = RoomConfig(
+                    temperature_device=self.devices[room_config["temperature_sensor"]["device"]],
+                    temperature_register=room_config["temperature_sensor"]["register"],
+                    relay_device=self.devices[room_config["relay"]["device"]],
+                    relay_register=room_config["relay"]["register"],
+                )
+        except Exception:
+            # If construction fails partway through (e.g. a later device is
+            # unreachable, or a RoomConfig's initial read fails), any devices
+            # already connected above are about to become unreferenced along
+            # with this half-built ModbusController. Their sockets would
+            # otherwise stay open indefinitely: closing a socket's underlying
+            # lwIP resources requires an explicit close() call, which
+            # gc.collect() alone cannot trigger.
+            for device in self.devices.values():
+                try:
+                    device.master._sock.close()
+                except Exception:
+                    pass
+            raise
 
 
