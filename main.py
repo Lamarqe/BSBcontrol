@@ -6,6 +6,7 @@ import restserver
 
 import modbus
 import thermostat
+import sys
 
 
 MODBUS_RETRY_INTERVAL = 10  # seconds between connection attempts
@@ -55,12 +56,20 @@ def main():
     """Main entry point of the program."""
     print("Starting main program")
     loop = asyncio.get_event_loop()
+    # Install exception handler to capture unhandled task exceptions with tracebacks
+    def _handle_exception(loop, context):
+        exc = context.get("exception")
+        print("Error occurred, exiting: {}".format(repr(exc)))
+        sys.print_exception(exc)
+
+    loop.set_exception_handler(_handle_exception)
     main_task = loop.create_task(async_main())
 
     try:
         loop.run_forever()
     except Exception as e:
-        print("Error occurred, exiting: ", e)
+        print("Error occurred, exiting: {}".format(repr(e)))
+        sys.print_exception(e)
     except KeyboardInterrupt:
         print("Program interrupted by the user. Exiting...")
     finally:
