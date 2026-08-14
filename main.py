@@ -56,13 +56,6 @@ def main():
     """Main entry point of the program."""
     print("Starting main program")
     loop = asyncio.get_event_loop()
-    # Install exception handler to capture unhandled task exceptions with tracebacks
-    def _handle_exception(loop, context):
-        exc = context.get("exception")
-        print("Error occurred, exiting: {}".format(repr(exc)))
-        sys.print_exception(exc)
-
-    loop.set_exception_handler(_handle_exception)
     main_task = loop.create_task(async_main())
 
     try:
