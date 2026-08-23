@@ -19,7 +19,7 @@ async def async_main():
 
         while True:
             try:
-                modbus_controller = modbus.ModbusController()
+                modbus_controller = await modbus.ModbusController.create()
                 thermostat_controller = thermostat.ThermostatController(modbus_controller, bsb_controller)
                 break
             except OSError as e:

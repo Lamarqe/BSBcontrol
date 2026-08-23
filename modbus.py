@@ -1,6 +1,6 @@
 import json
 
-from umodbus.tcp import TCP as ModbusTCPMaster
+from umodbus.asynchronous.tcp import AsyncTCP as ModbusTCPMaster
 
 CONFIG_FILE = "config/modbus.json"
 
@@ -13,13 +13,24 @@ class ModbusDevice:
         self.node_id = node_id
         self.master = ModbusTCPMaster(slave_ip=ip, slave_port=port)
 
-    def reconnect(self) -> None:
-        """Close the existing socket and open a fresh TCP connection."""
+    async def connect(self) -> None:
+        """Open (or, if already open, close and re-open) the TCP connection.
+
+        AsyncTCP.connect() closes any previously open writer itself, so this
+        also serves as the reconnect path used after a failed request.
+        """
+        await self.master.connect()
+
+    async def close(self) -> None:
+        """Close the underlying connection, ignoring errors."""
+        writer = self.master._sock_writer
+        if writer is None:
+            return
         try:
-            self.master._sock.close()
+            writer.close()
+            await writer.wait_closed()
         except Exception:
             pass
-        self.master = ModbusTCPMaster(slave_ip=self._ip, slave_port=self._port)
 
 
 class RoomConfig:
@@ -37,15 +48,20 @@ class RoomConfig:
         self._relay_device: ModbusDevice = relay_device
         self._relay_register: int = relay_register
         self.target_temperature: float = target_temperature
-        self._current_temperature: float = self._read_current_temperature()
-        self._relay_status: bool = self._read_relay_status()
+        self._current_temperature: float = None
+        self._relay_status: bool = None
 
-    def set_relay_status(self, status: bool) -> bool:
+    async def init(self) -> None:
+        """Perform the initial reads. Devices must already be connected."""
+        self._current_temperature = await self._read_current_temperature()
+        self._relay_status = await self._read_relay_status()
+
+    async def set_relay_status(self, status: bool) -> bool:
         """Set the relay status and return the value written.
 
         Raises OSError if the device does not confirm the write.
         """
-        success = self._relay_device.master.write_single_coil(
+        success = await self._relay_device.master.write_single_coil(
             slave_addr=self._relay_device.node_id,
             output_address=self._relay_register,
             output_value=status,
@@ -55,26 +71,27 @@ class RoomConfig:
         self._relay_status = status
         return status
 
-    def _read_relay_status(self) -> bool:
+    async def _read_relay_status(self) -> bool:
         """Read the current status of the relay."""
-        return self._relay_device.master.read_coils(
+        result = await self._relay_device.master.read_coils(
             slave_addr=self._relay_device.node_id,
             starting_addr=self._relay_register,
             coil_qty=1,
-        )[0]
+        )
+        return result[0]
 
     @property
     def relay_status(self) -> bool:
         """Get the current relay status."""
         return self._relay_status
 
-    def update_relay_status(self) -> None:
+    async def update_relay_status(self) -> None:
         """Update the relay status."""
-        self._relay_status = self._read_relay_status()
+        self._relay_status = await self._read_relay_status()
 
-    def _read_current_temperature(self) -> float:
+    async def _read_current_temperature(self) -> float:
         """Get the current temperature from the sensor."""
-        temperatures = self._temp_device.master.read_input_registers(
+        temperatures = await self._temp_device.master.read_input_registers(
             slave_addr=self._temp_device.node_id,
             starting_addr=self._temp_register,
             register_qty=1,
@@ -90,26 +107,37 @@ class RoomConfig:
 
 class ModbusController:
     def __init__(self):
-        """Initialize Modbus controller from configuration file."""
+        """Build device and room objects from configuration file (no I/O yet).
+
+        Call `connect()` (or use the `create()` factory) before use.
+        """
         config = json.load(open(CONFIG_FILE))
         modbus_config = config["devices"]
         self.devices: dict[str, ModbusDevice] = {}
         self.rooms: dict[str, RoomConfig] = {}
-        try:
-            for device_name, device_config in modbus_config.items():
-                self.devices[device_name] = ModbusDevice(
-                    ip=device_config["ip"], port=device_config["port"], node_id=device_config["node_id"]
-                )
+        for device_name, device_config in modbus_config.items():
+            self.devices[device_name] = ModbusDevice(
+                ip=device_config["ip"], port=device_config["port"], node_id=device_config["node_id"]
+            )
 
-            for room_name, room_config in config["rooms"].items():
-                self.rooms[room_name] = RoomConfig(
-                    temperature_device=self.devices[room_config["temperature_sensor"]["device"]],
-                    temperature_register=room_config["temperature_sensor"]["register"],
-                    relay_device=self.devices[room_config["relay"]["device"]],
-                    relay_register=room_config["relay"]["register"],
-                )
+        for room_name, room_config in config["rooms"].items():
+            self.rooms[room_name] = RoomConfig(
+                temperature_device=self.devices[room_config["temperature_sensor"]["device"]],
+                temperature_register=room_config["temperature_sensor"]["register"],
+                relay_device=self.devices[room_config["relay"]["device"]],
+                relay_register=room_config["relay"]["register"],
+            )
+
+    async def connect(self) -> None:
+        """Connect to all configured devices and perform the initial room reads."""
+        try:
+            for device in self.devices.values():
+                await device.connect()
+
+            for room in self.rooms.values():
+                await room.init()
         except Exception:
-            # If construction fails partway through (e.g. a later device is
+            # If connect() fails partway through (e.g. a later device is
             # unreachable, or a RoomConfig's initial read fails), any devices
             # already connected above are about to become unreferenced along
             # with this half-built ModbusController. Their sockets would
@@ -117,10 +145,14 @@ class ModbusController:
             # lwIP resources requires an explicit close() call, which
             # gc.collect() alone cannot trigger.
             for device in self.devices.values():
-                try:
-                    device.master._sock.close()
-                except Exception:
-                    pass
+                await device.close()
             raise
+
+    @classmethod
+    async def create(cls) -> "ModbusController":
+        """Build a ModbusController and connect it to all configured devices."""
+        self = cls()
+        await self.connect()
+        return self
 
 

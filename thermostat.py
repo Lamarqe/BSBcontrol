@@ -76,13 +76,13 @@ class ThermostatController:
             # 1. Refresh temperatures from hardware
             for room_name, room_cfg in self._modbus.rooms.items():
                 try:
-                    room_cfg._current_temperature = room_cfg._read_current_temperature()
+                    room_cfg._current_temperature = await room_cfg._read_current_temperature()
                     room = self.rooms[room_name]
                     room.current_temperature = room_cfg.current_temperature
                 except OSError as e:
                     print("WARNING: temperature read failed for {}: {}".format(room_name, e))
                     try:
-                        room_cfg._temp_device.reconnect()
+                        await room_cfg._temp_device.connect()
                     except OSError as re:
                         print("WARNING: reconnect failed for {}: {}".format(room_name, re))
                 await asyncio.sleep(0)  # yield after each room so Microdot can run
@@ -104,12 +104,12 @@ class ThermostatController:
                 if decision != room.relay_on:
                     room_cfg = self._modbus.rooms[room_name]
                     try:
-                        room.relay_on = room_cfg.set_relay_status(decision)
+                        room.relay_on = await room_cfg.set_relay_status(decision)
                         print("Relay {} turned {}".format(room_name, "On" if room.relay_on else "Off"))
                     except OSError as e:
                         print("WARNING: relay write failed for {}: {}".format(room_name, e))
                         try:
-                            room_cfg._relay_device.reconnect()
+                            await room_cfg._relay_device.connect()
                         except OSError as re:
                             print("WARNING: relay reconnect failed for {}: {}".format(room_name, re))
 
