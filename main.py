@@ -23,9 +23,13 @@ async def async_main():
         rest_server = restserver.RestServer(None, bsb_controller)
         rest_task = asyncio.create_task(rest_server.run())
 
+        # Build the device/room tree once (no I/O yet) and keep retrying
+        # connect() on this same instance, so failed attempts don't leak
+        # a fresh set of sockets on every retry cycle.
+        modbus_controller = modbus.ModbusController()
         while True:
             try:
-                modbus_controller = await modbus.ModbusController.create()
+                await modbus_controller.connect()
                 thermostat_controller = thermostat.ThermostatController(modbus_controller, bsb_controller)
                 break
             except OSError as e:

@@ -109,7 +109,8 @@ class ModbusController:
     def __init__(self):
         """Build device and room objects from configuration file (no I/O yet).
 
-        Call `connect()` (or use the `create()` factory) before use.
+        Call `connect()` before use. Safe to retry `connect()` repeatedly
+        (e.g. from a caller's retry loop) on this same instance.
         """
         config = json.load(open(CONFIG_FILE))
         modbus_config = config["devices"]
@@ -147,12 +148,5 @@ class ModbusController:
             for device in self.devices.values():
                 await device.close()
             raise
-
-    @classmethod
-    async def create(cls) -> "ModbusController":
-        """Build a ModbusController and connect it to all configured devices."""
-        self = cls()
-        await self.connect()
-        return self
 
 
