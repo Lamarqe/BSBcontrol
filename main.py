@@ -13,9 +13,15 @@ MODBUS_RETRY_INTERVAL = 10  # seconds between connection attempts
 
 
 async def async_main():
+    thermostat_task = None
     try:
         bsb_controller = bsb.BsbController()
         bsb_task = asyncio.create_task(bsb_controller.run())
+
+        # Start the REST server right away (BSB endpoints don't depend on Modbus),
+        # attaching the thermostat controller once Modbus init below succeeds.
+        rest_server = restserver.RestServer(None, bsb_controller)
+        rest_task = asyncio.create_task(rest_server.run())
 
         while True:
             try:
@@ -26,9 +32,9 @@ async def async_main():
                 print("Modbus init failed ({}), retrying in {} s...".format(e, MODBUS_RETRY_INTERVAL))
                 await asyncio.sleep(MODBUS_RETRY_INTERVAL)
 
+        rest_server.thermostat_controller = thermostat_controller
         thermostat_task = asyncio.create_task(thermostat_controller.run())
-        rest_server = restserver.RestServer(thermostat_controller, bsb_controller)
-        rest_task = asyncio.create_task(rest_server.run())
+
         while True:
             await asyncio.sleep(3600)
     except asyncio.CancelledError:
@@ -43,11 +49,12 @@ async def async_main():
             await bsb_task
         except asyncio.CancelledError:
             pass
-        thermostat_task.cancel()
-        try:
-            await thermostat_task
-        except asyncio.CancelledError:
-            pass
+        if thermostat_task is not None:
+            thermostat_task.cancel()
+            try:
+                await thermostat_task
+            except asyncio.CancelledError:
+                pass
         print("Main task was cancelled")
         raise
 

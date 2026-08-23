@@ -6,10 +6,14 @@ from microdot import Microdot
 
 
 class RestServer:
-    def __init__(self, thermostat_controller: thermostat.ThermostatController, bsb_controller: bsb.BsbController):
+    def __init__(self, thermostat_controller, bsb_controller: bsb.BsbController):
+        # thermostat_controller may be None if Modbus initialization hasn't
+        # completed yet; it is attached later once it becomes available.
         self.thermostat_controller = thermostat_controller
         self.bsb_controller = bsb_controller
         self.app = Microdot()
+
+
 
         @self.app.route("/")
         async def index(request):
@@ -17,18 +21,24 @@ class RestServer:
 
         @self.app.route("/current_temperature/<room>", methods=["GET"])
         async def get_current_temperature(request, room):
+            if self.thermostat_controller is None:
+                return {"message": "thermostat not ready"}, 503
             if room not in self.thermostat_controller.rooms:
                 return {"message": "no such room"}, 404
             return {"current_temperature": self.thermostat_controller.rooms[room].current_temperature}
 
         @self.app.route("/target_temperature/<room>", methods=["GET"])
         async def get_target_temperature(request, room):
+            if self.thermostat_controller is None:
+                return {"message": "thermostat not ready"}, 503
             if room not in self.thermostat_controller.rooms:
                 return {"message": "no such room"}, 404
             return {"target_temperature": self.thermostat_controller.rooms[room].target_temperature}
 
         @self.app.route("/target_temperature/<room>", methods=["POST"])
         async def post_target_temperature(request, room):
+            if self.thermostat_controller is None:
+                return {"message": "thermostat not ready"}, 503
             if room not in self.thermostat_controller.rooms:
                 return {"message": "no such room"}, 404
             self.thermostat_controller.set_target_temperature(room, request.json["target_temperature"])
@@ -36,6 +46,8 @@ class RestServer:
 
         @self.app.route("/relay_status/<room>", methods=["GET"])
         async def get_relay_status(request, room):
+            if self.thermostat_controller is None:
+                return {"message": "thermostat not ready"}, 503
             if room not in self.thermostat_controller.rooms:
                 return {"message": "no such room"}, 404
             return {"relay_status": self.thermostat_controller.rooms[room].relay_on}
