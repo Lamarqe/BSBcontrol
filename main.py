@@ -1,6 +1,8 @@
 import asyncio
 import time
 
+import machine
+
 from bsb import bsb
 import restserver
 
@@ -9,7 +11,7 @@ import thermostat
 import sys
 
 
-MODBUS_RETRY_INTERVAL = 10  # seconds between connection attempts
+MODBUS_RETRY_INTERVAL = 300  # seconds between connection attempts
 
 
 async def async_main():
@@ -74,9 +76,12 @@ def main():
     except Exception as e:
         print("Error occurred, exiting: {}".format(repr(e)))
         sys.print_exception(e)
+        main_task.cancel()
+        loop.close()
+        print("Rebooting due to unhandled error in main event loop...")
+        machine.reset()
     except KeyboardInterrupt:
         print("Program interrupted by the user. Exiting...")
-    finally:
         main_task.cancel()
         loop.close()
 
