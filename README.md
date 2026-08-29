@@ -34,14 +34,15 @@ curl http://192.168.2.150/
 GET /current_temperature/<room>
 ```
 
-Returns the temperature currently measured by the Modbus sensor for the given room.
+Returns the temperatures currently measured by the Modbus sensors for all rooms
+whose names match the supplied regular expression.
 
 ```bash
-curl http://192.168.2.150/current_temperature/Arbeitszimmer
+curl 'http://192.168.2.150/current_temperature/.*zimmer'
 ```
 
 ```json
-{"current_temperature": 21.4}
+{"current_temperature": {"Arbeitszimmer": 21.4, "Schlafzimmer": 19.8}}
 ```
 
 **Errors**
@@ -58,14 +59,15 @@ curl http://192.168.2.150/current_temperature/Arbeitszimmer
 GET /target_temperature/<room>
 ```
 
-Returns the current target (setpoint) temperature for the given room.
+Returns the current target (setpoint) temperature for every room whose name
+matches the supplied regular expression.
 
 ```bash
-curl http://192.168.2.150/target_temperature/Arbeitszimmer
+curl 'http://192.168.2.150/target_temperature/.*zimmer'
 ```
 
 ```json
-{"target_temperature": 22.0}
+{"target_temperature": {"Arbeitszimmer": 22.0, "Schlafzimmer": 21.0}}
 ```
 
 ---
@@ -73,16 +75,25 @@ curl http://192.168.2.150/target_temperature/Arbeitszimmer
 ### Room temperature (target) — write
 
 ```
-POST /target_temperature/<room>
+POST /target_temperature/update
 Content-Type: application/json
 ```
 
-Updates the heating setpoint for the given room. The relay hysteresis is ±0.5 °C.
+Updates the heating setpoint for each named room. Room names are matched
+literally; regular expressions are not supported for this endpoint. The relay
+hysteresis is ±0.5 °C.
 
 ```bash
-curl -X POST http://192.168.2.150/target_temperature/Arbeitszimmer \
+curl -X POST http://192.168.2.150/target_temperature/update \
      -H "Content-Type: application/json" \
-     -d '{"target_temperature": 21.5}'
+  -d '{"target_temperature": {"Arbeitszimmer": 21.5, "Schlafzimmer": 19.0}}'
+```
+
+The same update can be sent with the standard-library client script after
+setting `DEVICE` and `TARGET_TEMPERATURES` at the top of the script:
+
+```bash
+python update_target_temperatures.py
 ```
 
 ```json
@@ -94,6 +105,25 @@ curl -X POST http://192.168.2.150/target_temperature/Arbeitszimmer \
 | Status | Body | Meaning |
 |--------|------|---------|
 | 404 | `{"message": "no such room"}` | Room name not in `config/modbus.json` |
+| 400 | `{"message": "invalid room regexp"}` | Room selector is not a valid regular expression |
+
+---
+
+### Relay status
+
+```
+GET /relay_status/<room>
+```
+
+Returns the relay state for every room whose name matches the supplied regular
+expression.
+
+```json
+{"relay_status": {"Arbeitszimmer": true, "Schlafzimmer": false}}
+```
+
+The endpoint returns the same `400` and `404` errors described above for an
+invalid regular expression or a selector matching no rooms.
 
 ---
 

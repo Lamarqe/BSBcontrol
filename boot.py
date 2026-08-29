@@ -2,7 +2,6 @@ import json
 
 import machine
 import network
-from network import LAN, WLAN
 
 # Initialize UART2 (BSB bus) before the network stack to guarantee
 # that uart_driver_install() gets contiguous DMA memory from the fresh heap.
@@ -10,7 +9,7 @@ machine.UART(2, rx=36, tx=5, baudrate=4800, parity=1, stop=1, bits=8)
 
 nw_config = json.load(open("config/network.json"))
 
-lan = LAN(
+lan = network.LAN(
     mdc=machine.Pin(23),
     mdio=machine.Pin(18),
     power=machine.Pin(12),
@@ -23,7 +22,7 @@ lan.active(True)
 lan.ipconfig(addr4=nw_config["ipconfig"]["addr4"], gw4=nw_config["ipconfig"]["gw4"])
 if not lan.isconnected():
     lan.active(False)
-    wlan = WLAN(network.STA_IF)
+    wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     network.ipconfig(dns=nw_config["ipconfig"]["dns"])
     wlan.ipconfig(addr4=nw_config["ipconfig"]["addr4"], gw4=nw_config["ipconfig"]["gw4"])

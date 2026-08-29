@@ -21,4 +21,7 @@
     // MicroPico settings
     "micropico.syncFolder": "",
     "micropico.openOnStart": true,
+    "chat.tools.terminal.autoApprove": {
+        "diff": true
+    },
 }

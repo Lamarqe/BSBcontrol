@@ -1,0 +1,9 @@
+# Runtime dependency used by the REST server
+microdot
+
+# Test runner and async test support
+pytest
+pytest-asyncio
+
+# Project linting
+ruff

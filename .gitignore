@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.venv/
 
 # config files
 config/
@@ -9,6 +10,6 @@ state/
 
 # Distribution / packaging
 typings/
-umodbus/
+umodbus
 microdot/
 

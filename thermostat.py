@@ -41,6 +41,10 @@ class ThermostatController:
         self.rooms: dict[str, RoomState] = {}
         for room_name, room_cfg in self._modbus.rooms.items():
             target = persisted.get(room_name, room_cfg.target_temperature)
+            try:
+                target = float(target)
+            except (TypeError, ValueError):
+                target = float(room_cfg.target_temperature)
             self.rooms[room_name] = RoomState(
                 name=room_name,
                 current_temperature=room_cfg.current_temperature,
@@ -67,7 +71,7 @@ class ThermostatController:
             )
 
     def set_target_temperature(self, room_name: str, temp: float) -> None:
-        self.rooms[room_name].target_temperature = temp
+        self.rooms[room_name].target_temperature = float(temp)
         self._save_state()
 
     async def run(self) -> None:
