@@ -79,17 +79,21 @@ class ThermostatController:
         while True:
             # 1. Refresh temperatures from hardware
             for room_name, room_cfg in self._modbus.rooms.items():
+                temperature_read_ok = True
                 try:
                     room_cfg._current_temperature = await room_cfg._read_current_temperature()
                     room = self.rooms[room_name]
                     room.current_temperature = room_cfg.current_temperature
-                except OSError as e:
+                except (OSError, ValueError) as e:
+                    temperature_read_ok = False
                     print("WARNING: temperature read failed for {}: {}".format(room_name, e))
                     try:
                         await room_cfg._temp_device.connect()
-                    except OSError as re:
+                    except (OSError, ValueError) as re:
                         print("WARNING: reconnect failed for {}: {}".format(room_name, re))
                 await asyncio.sleep(0)  # yield after each room so Microdot can run
+                if not temperature_read_ok:
+                    continue
 
             # 2. Build system context (BSB data and energy price reserved for future rules)
             ctx = SystemContext(bsb_data={}, energy_price=None)

@@ -11,6 +11,7 @@ connections are made.  Filesystem access is isolated via pytest's tmp_path
 fixture and monkeypatch of thermostat.STATE_FILE.
 """
 
+import asyncio
 import json
 import pytest
 
@@ -280,3 +281,47 @@ class TestStatePersistence:
         saved = json.loads(state_file.read_text())
         assert saved["living"] == 21.0
         assert saved["bedroom"] == 18.5
+
+
+
+def test_modbus_protocol_error_does_not_end_polling(monkeypatch, tmp_path):
+    class StopAfterSecondCycle(Exception):
+        pass
+
+    class FakeDevice:
+        def __init__(self):
+            self.connect_count = 0
+
+        async def connect(self):
+            self.connect_count += 1
+
+    class CyclingRoom(FakeRoomConfig):
+        def __init__(self, device):
+            super().__init__(current_temperature=22.0, relay_status=True)
+            self._temp_device = device
+            self._read_results = [ValueError("wrong transaction ID"), 22.0]
+
+        async def _read_current_temperature(self):
+            result = self._read_results.pop(0)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+    device = FakeDevice()
+    room_cfg = CyclingRoom(device)
+    controller = _make_controller({"living": room_cfg}, monkeypatch, tmp_path)
+    sleep_count = 0
+
+    async def stop_after_two_cycles(delay):
+        nonlocal sleep_count
+        sleep_count += 1
+        if sleep_count == 4:
+            raise StopAfterSecondCycle
+
+    monkeypatch.setattr(thermostat.asyncio, "sleep", stop_after_two_cycles)
+
+    with pytest.raises(StopAfterSecondCycle):
+        asyncio.run(controller.run())
+
+    assert device.connect_count == 1
+    assert room_cfg._read_results == []
