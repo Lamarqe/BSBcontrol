@@ -325,3 +325,52 @@ def test_modbus_protocol_error_does_not_end_polling(monkeypatch, tmp_path):
 
     assert device.connect_count == 1
     assert room_cfg._read_results == []
+
+
+def test_modbus_protocol_error_on_relay_write_does_not_end_polling(monkeypatch, tmp_path):
+    class StopAfterSecondCycle(Exception):
+        pass
+
+    class FakeDevice:
+        def __init__(self):
+            self.connect_count = 0
+
+        async def connect(self):
+            self.connect_count += 1
+
+    class FailingRelayRoom(FakeRoomConfig):
+        def __init__(self, device):
+            # too cold with relay off → controller wants to switch it on
+            super().__init__(current_temperature=20.0, relay_status=False)
+            self._relay_device = device
+            self._write_results = [ValueError("wrong transaction ID"), None]
+
+        async def _read_current_temperature(self):
+            return 20.0
+
+        async def set_relay_status(self, status):
+            result = self._write_results.pop(0)
+            if isinstance(result, Exception):
+                raise result
+            self.relay_set_calls.append(status)
+            return status
+
+    device = FakeDevice()
+    room_cfg = FailingRelayRoom(device)
+    controller = _make_controller({"living": room_cfg}, monkeypatch, tmp_path)
+    sleep_count = 0
+
+    async def stop_after_two_cycles(delay):
+        nonlocal sleep_count
+        sleep_count += 1
+        if sleep_count == 4:
+            raise StopAfterSecondCycle
+
+    monkeypatch.setattr(thermostat.asyncio, "sleep", stop_after_two_cycles)
+
+    with pytest.raises(StopAfterSecondCycle):
+        asyncio.run(controller.run())
+
+    assert device.connect_count == 1
+    assert room_cfg.relay_set_calls == [True]
+    assert controller.rooms["living"].relay_on is True
