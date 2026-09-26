@@ -23,14 +23,7 @@ class ModbusDevice:
 
     async def close(self) -> None:
         """Close the underlying connection, ignoring errors."""
-        writer = self.master._sock_writer
-        if writer is None:
-            return
-        try:
-            writer.close()
-            await writer.wait_closed()
-        except Exception:
-            pass
+        await self.master._close()
 
 
 class RoomConfig:
