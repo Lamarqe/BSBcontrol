@@ -2,6 +2,7 @@ import asyncio
 import re
 
 from bsb.bsb import BsbController
+from bsb.protocol import BsbError
 from thermostat import ThermostatController
 from microdot import Microdot
 
@@ -101,6 +102,8 @@ class RestServer:
                 result = await self.bsb_controller.set_field(int(field_id), request.json["value"])
             except ValueError as e:
                 return {"message": str(e)}, 404
+            except BsbError as e:
+                return {"message": str(e)}, 400
             except asyncio.TimeoutError:
                 return {"message": "timeout"}, 504
             except OSError as e:
