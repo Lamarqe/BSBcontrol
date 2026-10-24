@@ -5,7 +5,7 @@ import os
 import modbus
 
 POLL_INTERVAL = 30   # seconds
-HYSTERESIS = 0.5     # degrees Celsius
+HYSTERESIS = 0.3     # degrees Celsius
 STATE_FILE = "state/thermostat_state.json"
 
 
